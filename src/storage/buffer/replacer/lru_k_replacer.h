@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include "replacer.h"
 #include "../common/error.h"
+#define inf std::numeric_limits<size_t>::max()
 
 namespace wsdb {
 
@@ -52,7 +53,12 @@ private:
 
     explicit LRUKNode(frame_id_t fid, size_t k) : fid_(fid), k(k), is_evictable_(false) {}
 
-    void AddHistory(timestamp_t ts) { WSDB_STUDENT_TODO(l1, f1); }
+    void AddHistory(timestamp_t ts) { 
+      //WSDB_STUDENT_TODO(l1, f1); 
+      history_.push_back(ts);
+      if (history_.size() > k)
+        history_.pop_front(); 
+    }
 
     /**
      * Get the distance between the current timestamp and the k-th timestamp in the history,
@@ -62,18 +68,33 @@ private:
      */
     auto GetBackwardKDistance(timestamp_t cur_ts) -> unsigned long long
     {
-      WSDB_STUDENT_TODO(l1, f1);
+      //WSDB_STUDENT_TODO(l1, f1);
+      if (history_.size() < k) 
+        return inf;
+      else
+        return (cur_ts - history_.front());
     }
 
-    [[nodiscard]] auto IsEvictable() const -> bool { WSDB_STUDENT_TODO(l1, f1); }
+    auto GetFirstTime() -> unsigned long long
+    {
+      return history_.front();
+    }
 
-    auto SetEvictable(bool set_evictable) -> void { WSDB_STUDENT_TODO(l1, f1); }
+    [[nodiscard]] auto IsEvictable() const -> bool { 
+      //WSDB_STUDENT_TODO(l1, f1); 
+      return is_evictable_;
+    }
+
+    auto SetEvictable(bool set_evictable) -> void { 
+      //WSDB_STUDENT_TODO(l1, f1); 
+      is_evictable_ = set_evictable;
+    }
 
   private:
     std::list<timestamp_t> history_;
     frame_id_t             fid_{INVALID_FRAME_ID};
     size_t                 k{};
-    bool                   is_evictable_{};
+    bool                   is_evictable_{0};
   };
 
 private:

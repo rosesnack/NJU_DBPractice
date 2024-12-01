@@ -91,10 +91,19 @@ auto BufferPoolManager::DeletePage(file_id_t fid, page_id_t pid) -> bool {
 
 auto BufferPoolManager::DeleteAllPages(file_id_t fid) -> bool { 
   bool suc = true;
-  for (auto it = page_frame_lookup_.begin(); it != page_frame_lookup_.end(); ++it)
-    if (it->first.fid == fid)
-      if (!DeletePage(fid, it->first.pid))
+  auto it = page_frame_lookup_.begin();
+  while (it != page_frame_lookup_.end()) {
+    if (it->first.fid == fid) {
+      if (!DeletePage(fid, it->first.pid)) {
         suc = false;
+        it++;
+      }
+      else
+        it = page_frame_lookup_.begin();
+    }
+    else
+      it++;
+  }
   return suc;
 }
 
@@ -128,8 +137,7 @@ auto BufferPoolManager::GetAvailableFrame() -> frame_id_t {
     return frame_id;
   }
   frame_id_t frame_id;
-  replacer_->Victim(&frame_id);
-  if (frame_id == -1) {
+  if (!replacer_->Victim(&frame_id)) {
     WSDB_THROW(WSDB_NO_FREE_FRAME, "buffer pool manager cannot find available frame to load page");
   }
   return frame_id;

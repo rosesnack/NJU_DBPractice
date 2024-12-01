@@ -36,32 +36,142 @@ TableHandle::TableHandle(DiskManager *disk_manager, BufferPoolManager *buffer_po
   if (storage_model_ == PAX_MODEL) {
     field_offset_.resize(schema_->GetFieldCount());
     // calculate offsets of fields
-    WSDB_STUDENT_TODO(l1, f2);
+    //WSDB_STUDENT_TODO(l1, f2);
+    int rec_per_page = tab_hdr_.rec_per_page_;
+    for (size_t i = 0; i < schema_->GetFieldCount(); i++)
+      field_offset_[i] = rec_per_page * schema_->GetFieldOffset(i);
   }
 }
 
-auto TableHandle::GetRecord(const RID &rid) -> RecordUptr
-{
+auto TableHandle::GetRecord(const RID &rid) -> RecordUptr {
   auto nullmap = std::make_unique<char[]>(tab_hdr_.nullmap_size_);
   auto data    = std::make_unique<char[]>(tab_hdr_.rec_size_);
-  WSDB_STUDENT_TODO(l1, t3);
+  //WSDB_STUDENT_TODO(l1, t3);
+
+  page_id_t pid = rid.PageID();
+  slot_id_t sid = rid.SlotID();
+  PageHandleUptr pageHandle = FetchPageHandle(pid);
+  
+  char* bitmap = pageHandle->GetBitmap();
+  if (BitMap::GetBit(bitmap, sid) == false) {
+    buffer_pool_manager_->UnpinPage(table_id_, pid, false);
+    WSDB_THROW(WSDB_RECORD_MISS, "record not exists");
+  }
+  else {
+    pageHandle->ReadSlot(sid, nullmap.get(), data.get());
+    buffer_pool_manager_->UnpinPage(table_id_, pid, false);
+  }
+  return std::make_unique<Record>(schema_.get(), nullmap.get(), data.get(), rid);
 }
 
-auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> ChunkUptr { WSDB_STUDENT_TODO(l1, f2); }
+auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> ChunkUptr { 
+  //WSDB_STUDENT_TODO(l1, f2); 
+  PageHandleUptr pageHandle = FetchPageHandle(pid);
+  ChunkUptr cnk = pageHandle->ReadChunk(chunk_schema);
+  buffer_pool_manager_->UnpinPage(table_id_, pid, false);
+  return cnk;
+}
 
-auto TableHandle::InsertRecord(const Record &record) -> RID { WSDB_STUDENT_TODO(l1, t3); }
+auto TableHandle::InsertRecord(const Record &record) -> RID { 
+  //WSDB_STUDENT_TODO(l1, t3); 
+  PageHandleUptr pageHandle = CreatePageHandle();
+
+  char* bitmap = pageHandle->GetBitmap();
+  slot_id_t sid = BitMap::FindFirst(bitmap, tab_hdr_.rec_per_page_, 0, false);
+
+  pageHandle->WriteSlot(sid, record.GetNullMap(), record.GetData(), false);
+
+  BitMap::SetBit(bitmap, sid, true);
+  Page* page = pageHandle->GetPage();
+  size_t rn = page->GetRecordNum();
+  rn += 1;
+  page->SetRecordNum(rn);
+
+  ++tab_hdr_.rec_num_;
+  if (rn == tab_hdr_.rec_per_page_)
+    tab_hdr_.first_free_page_ = page->GetNextFreePageId();
+
+  page_id_t pid = page->GetPageId();
+  buffer_pool_manager_->UnpinPage(table_id_, pid, true);
+
+  return RID(pid, sid);
+}
 
 void TableHandle::InsertRecord(const RID &rid, const Record &record)
 {
-  if (rid.PageID() == INVALID_PAGE_ID) {
-    WSDB_THROW(WSDB_PAGE_MISS, fmt::format("Page: {}", rid.PageID()));
+  //WSDB_STUDENT_TODO(l1, t3);
+  page_id_t pid = rid.PageID();
+  slot_id_t sid = rid.SlotID();
+  if (rid == INVALID_RID) {
+    buffer_pool_manager_->UnpinPage(table_id_, pid, false);
+    WSDB_THROW(WSDB_PAGE_MISS, "RID.page is not valid");
   }
-  WSDB_STUDENT_TODO(l1, t3);
+
+  PageHandleUptr pageHandle = FetchPageHandle(pid);
+  char* bitmap = pageHandle->GetBitmap();
+  if (BitMap::GetBit(bitmap, sid) == true) {
+    buffer_pool_manager_->UnpinPage(table_id_,pid,false);
+    WSDB_THROW(WSDB_RECORD_EXISTS, "record already exists");
+  }
+
+  pageHandle->WriteSlot(sid, record.GetNullMap(), record.GetData(), false);
+
+  BitMap::SetBit(bitmap, sid, true);
+  Page* page = pageHandle->GetPage();
+  size_t rn = page->GetRecordNum();
+  rn += 1;
+  page->SetRecordNum(rn);
+
+  ++tab_hdr_.rec_num_;
+  if (rn == tab_hdr_.rec_per_page_)
+    tab_hdr_.first_free_page_ = page->GetNextFreePageId();
+
+  buffer_pool_manager_->UnpinPage(table_id_, pid, true);
 }
 
-void TableHandle::DeleteRecord(const RID &rid) { WSDB_STUDENT_TODO(l1, t3); }
+void TableHandle::DeleteRecord(const RID &rid) { 
+  //WSDB_STUDENT_TODO(l1, t3); 
+  page_id_t pid = rid.PageID();
+  slot_id_t sid = rid.SlotID();
+  PageHandleUptr pageHandle = FetchPageHandle(pid);
+  char* bitmap = pageHandle->GetBitmap();
+  if (BitMap::GetBit(bitmap, sid) == false) {
+    buffer_pool_manager_->UnpinPage(table_id_, pid, false);
+    WSDB_THROW(WSDB_RECORD_MISS, "record not exists");
+  }
 
-void TableHandle::UpdateRecord(const RID &rid, const Record &record) { WSDB_STUDENT_TODO(l1, t3); }
+  BitMap::SetBit(bitmap, sid, false);
+  Page* page = pageHandle->GetPage();
+  size_t rn = page->GetRecordNum();
+  rn -= 1;
+  page->SetRecordNum(rn);
+
+  --tab_hdr_.rec_num_;
+  if (rn == tab_hdr_.rec_per_page_ - 1) {
+      page->SetNextFreePageId(tab_hdr_.first_free_page_);
+      tab_hdr_.first_free_page_ = pid;
+  }
+
+  buffer_pool_manager_->UnpinPage(table_id_, pid, true);
+
+  return;
+}
+
+void TableHandle::UpdateRecord(const RID &rid, const Record &record) { 
+  //WSDB_STUDENT_TODO(l1, t3); 
+  page_id_t pid = rid.PageID();
+  slot_id_t sid = rid.SlotID();
+  PageHandleUptr pageHandle = FetchPageHandle(pid);
+  char* bitmap = pageHandle->GetBitmap();
+  if (BitMap::GetBit(bitmap, sid) == false) {
+    buffer_pool_manager_->UnpinPage(table_id_, pid, false);
+    WSDB_THROW(WSDB_RECORD_MISS, "record not exists");
+  }
+  
+  pageHandle->WriteSlot(sid, record.GetNullMap(), record.GetData(), true);
+
+  buffer_pool_manager_->UnpinPage(table_id_, pid, true);
+}
 
 auto TableHandle::FetchPageHandle(page_id_t page_id) -> PageHandleUptr
 {
