@@ -37,8 +37,14 @@ void InsertExecutor::Next()
 {
   // number of inserted records
   int count = 0;
-
-  WSDB_STUDENT_TODO(l2, t1);
+  // WSDB_STUDENT_TODO(l2, t1);
+  if (is_end_) {
+    WSDB_FETAL("InsertExecutor is end");
+  }
+  for (auto &rec : inserts_) {
+    tbl_->InsertRecord(*rec);
+    ++count;
+  }
 
   std::vector<ValueSptr> values{ValueFactory::CreateIntValue(count)};
   record_ = std::make_unique<Record>(out_schema_.get(), values, INVALID_RID);

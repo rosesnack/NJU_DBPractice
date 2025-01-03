@@ -29,12 +29,27 @@ void SeqScanExecutor::Init()
 {
   rid_ = tab_->GetFirstRID();
   
-  WSDB_STUDENT_TODO(l2, t1);
+  //WSDB_STUDENT_TODO(l2, t1);
+  if (!IsEnd()) {
+    record_ = tab_->GetRecord(rid_);
+  } 
 }
 
-void SeqScanExecutor::Next() { WSDB_STUDENT_TODO(l2, t1); }
+void SeqScanExecutor::Next() { 
+  //WSDB_STUDENT_TODO(l2, t1); 
+  if (IsEnd()) {
+    WSDB_FETAL("SeqScanExecutor is end");
+  }
+  rid_ = tab_->GetNextRID(rid_);
+  if (!IsEnd()) {
+    record_ = tab_->GetRecord(rid_);
+  }  
+}
 
-auto SeqScanExecutor::IsEnd() const -> bool { WSDB_STUDENT_TODO(l2, t1); }
+auto SeqScanExecutor::IsEnd() const -> bool { 
+  //WSDB_STUDENT_TODO(l2, t1); 
+  return rid_ == INVALID_RID;
+}
 
 auto SeqScanExecutor::GetOutSchema() const -> const RecordSchema * { return &tab_->GetSchema(); }
 }  // namespace wsdb

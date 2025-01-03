@@ -45,7 +45,26 @@ void UpdateExecutor::Next()
   // number of updated records
   int count = 0;
 
-  WSDB_STUDENT_TODO(l2, t1);
+  //WSDB_STUDENT_TODO(l2, t1);
+  child_->Init();
+  while (!child_->IsEnd()) {
+    auto rec = child_->GetRecord();
+    std::vector<ValueSptr> new_values;
+    for (size_t i = 0; i < rec->GetSchema()->GetFieldCount(); ++i) {
+      new_values.push_back(rec->GetValueAt(i)); 
+      for (auto update : updates_) {
+        if (update.first == rec->GetSchema()->GetFieldAt(i)) {
+          new_values.pop_back();
+          new_values.push_back(update.second);
+          break;
+        }
+      }  
+    }
+    auto new_record = std::make_unique<Record>(rec->GetSchema(), new_values, rec->GetRID());
+    tbl_->UpdateRecord(rec->GetRID(), *new_record);
+    child_->Next();
+    ++count;
+  }
 
   std::vector<ValueSptr> values{ValueFactory::CreateIntValue(count)};
   record_ = std::make_unique<Record>(out_schema_.get(), values, INVALID_RID);
